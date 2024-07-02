@@ -61,26 +61,37 @@ void prime_checker(int start, int end, int &prime_count, int num_threads)
 
 void handle_task(tcp::socket socket)
 {
-    boost::asio::streambuf buf;
-    read_until(socket, buf, "\n");
-    std::istream is(&buf);
-    int start, end, threads;
-    is >> start >> end >> threads;
-    std::cout << "Received task: Start = " << start << " End = " << end << " Threads = " << threads << std::endl;
+    try
+    {
+        boost::asio::streambuf buf;
+        read_until(socket, buf, "\n");
+        std::istream is(&buf);
+        int start, end, threads;
+        is >> start >> end >> threads;
+        std::cout << "Received task: Start = " << start << " End = " << end << " Threads = " << threads << std::endl;
 
-    int prime_count = 0;
-    prime_checker(start, end, prime_count, threads);
+        int prime_count = 0;
+        prime_checker(start, end, prime_count, threads);
 
-    std::string result = std::to_string(prime_count) + "\n";
-    write(socket, buffer(result));
-    std::cout << "Task completed. Primes found: " << prime_count << std::endl;
+        std::string result = std::to_string(prime_count) + "\n";
+        write(socket, buffer(result));
+        std::cout << "Task completed. Primes found: " << prime_count << std::endl;
+
+        // Properly close the socket after the task is done
+        socket.shutdown(tcp::socket::shutdown_both);
+        socket.close();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Exception in handle_task: " << e.what() << std::endl;
+    }
 }
 
 int main()
 {
     io_service io_service;
 
-    tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 12346)); // Listen on port 12346
+    tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 12345)); // Listen on port 12345
 
     while (true)
     {

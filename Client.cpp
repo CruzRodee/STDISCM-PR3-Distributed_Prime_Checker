@@ -64,7 +64,15 @@ int main()
     std::cout << "Enter how many threads to use: ";
     std::cin >> threads;
 
+    // Start - For the Time in milliseconds
+    auto startTime = std::chrono::high_resolution_clock::now();
     send_task_to_server(start, end, threads);
+
+    // End - For the Time in milliseconds
+    auto endTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsedTime = endTime - startTime;
+
+    std::cout << "Time taken: " << elapsedTime.count() << " milliseconds." << std::endl;
 
     return 0;
 }

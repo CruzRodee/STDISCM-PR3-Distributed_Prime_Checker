@@ -63,60 +63,108 @@ void prime_checker(int start, int end, int &prime_count, int num_threads)
 }
 
 // Function for handling the client connections
-void handle_client(tcp::socket socket, std::vector<tcp::socket> &slaves, bool master_only)
+void handle_client(tcp::socket socket, std::vector<tcp::socket> &slaves, bool master_only, io_service &io_service)
 {
-    std::cout << "Handling Client" << std::endl;
-    boost::asio::streambuf buf;
-    read_until(socket, buf, "\n");
-    std::istream is(&buf);
-    int start, end, threads;
-    is >> start >> end >> threads;
-    std::cout << "Client input: Start = " << start << " End = " << end << " Thread No. = " << threads << std::endl;
-
-    int total_primes = 0;
-
-    // Master-only mode: Master handles the entire range
-    if (master_only)
+    try
     {
-        prime_checker(start, end, total_primes, threads);
-    }
-    else // Using slave servers
-    {
-        int num_slaves = slaves.size();                   // Number of slave servers
-        int range = (end - start + 1) / (num_slaves + 1); // +1 for the master
+        std::cout << "Handling Client" << std::endl;
+        boost::asio::streambuf buf;
+        read_until(socket, buf, "\n");
+        std::istream is(&buf);
+        int start, end, threads;
+        is >> start >> end >> threads;
+        std::cout << "Client input: Start = " << start << " End = " << end << " Thread No. = " << threads << std::endl;
 
-        // Master server also handles a part of the range
-        int master_start = start;
-        int master_end = master_start + range - 1;
-        int master_primes = 0;
-        prime_checker(master_start, master_end, master_primes, threads);
-        total_primes += master_primes;
+        int total_primes = 0;
 
-        // Distribute remaining tasks to the slave servers
-        for (int i = 0; i < num_slaves; ++i)
+        if (!master_only)
         {
-            int s = start + (i + 1) * range;
-            int e = (i == num_slaves - 1) ? end : s + range - 1;
+            // Attempt to reconnect to the slave servers at the start
+            for (int i = 0; i < slaves.size(); ++i)
+            {
+                boost::system::error_code ec;
+                slaves[i].shutdown(tcp::socket::shutdown_both, ec);
+                slaves[i].close(ec);
 
-            std::string message = std::to_string(s) + " " + std::to_string(e) + " " + std::to_string(threads) + "\n";
-            write(slaves[i], buffer(message));
+                slaves[i] = tcp::socket(io_service);
+                tcp::resolver resolver(io_service);
+                tcp::resolver::query query("35.187.243.198", "12345"); // Use your slave address and port
+                tcp::resolver::iterator endpoint_iterator = resolver.resolve(query, ec);
+                if (!ec)
+                {
+                    connect(slaves[i], endpoint_iterator, ec);
+                    if (ec)
+                    {
+                        std::cerr << "Failed to reconnect to slave " << i << ": " << ec.message() << std::endl;
+                    }
+                    else
+                    {
+                        std::cout << "Reconnected to slave " << i << std::endl;
+                    }
+                }
+            }
         }
 
-        // Collect results from the slave servers
-        for (int i = 0; i < num_slaves; ++i)
+        // Master-only mode: Master handles the entire range
+        if (master_only)
         {
-            boost::asio::streambuf result_buf;
-            read_until(slaves[i], result_buf, "\n");
-            std::istream result_stream(&result_buf);
-            int primes;
-            result_stream >> primes;
-            total_primes += primes;
+            prime_checker(start, end, total_primes, threads);
         }
-    }
+        else // Using slave servers
+        {
+            int num_slaves = slaves.size();                   // Number of slave servers
+            int range = (end - start + 1) / (num_slaves + 1); // +1 for the master
 
-    std::string response = "Total primes: " + std::to_string(total_primes) + "\n";
-    std::cout << "Total Primes found for Client: " << total_primes << std::endl;
-    write(socket, buffer(response));
+            // Distribute tasks to the slave servers
+            for (int i = 0; i < num_slaves; ++i)
+            {
+                int s = start + i * range;
+                int e = (i == num_slaves - 1) ? end - range : s + range - 1;
+
+                std::string message = std::to_string(s) + " " + std::to_string(e) + " " + std::to_string(threads) + "\n";
+                write(slaves[i], buffer(message));
+            }
+
+            // Master server handles the end range
+            int master_start = end - range + 1;
+            int master_end = end;
+            int master_primes = 0;
+            std::cout << "Received task: Start = " << master_start << " End = " << master_end << " Threads = " << threads << std::endl;
+            prime_checker(master_start, master_end, master_primes, threads);
+            total_primes += master_primes;
+
+            // Collect results from the slave servers
+            for (int i = 0; i < num_slaves; ++i)
+            {
+                boost::asio::streambuf result_buf;
+                boost::system::error_code ec;
+                read_until(slaves[i], result_buf, "\n", ec);
+                if (ec)
+                {
+                    std::cerr << "Error reading from slave " << i << ": " << ec.message() << std::endl;
+                    continue;
+                }
+
+                std::istream result_stream(&result_buf);
+                int primes;
+                result_stream >> primes;
+                total_primes += primes;
+                std::cout << "Primes from slave " << i << ": " << primes << std::endl;
+            }
+        }
+
+        std::string response = "Total primes: " + std::to_string(total_primes) + "\n";
+        std::cout << "Total Primes found for Client: " << total_primes << std::endl;
+        write(socket, buffer(response));
+
+        // Properly close the socket
+        socket.shutdown(tcp::socket::shutdown_both);
+        socket.close();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Exception in handle_client: " << e.what() << std::endl;
+    }
 }
 
 int main()
@@ -130,12 +178,10 @@ int main()
 
     if (!master_only)
     {
-        // copy paste this for adding more slaves
-        // Code for connecting to a slave, at the moment only one slave
-        // Slave 1: Localhost Slave
+        // Slave 2: Google VM Slave
         tcp::socket slave_socket(io_service);                                // socket for slave
         tcp::resolver resolver(io_service);                                  // resolver for translating slave address+port to endpoint
-        tcp::resolver::query query("127.0.0.1", "12346");                    // create a query with the slave address+port, change depending on the machine's actual server+port
+        tcp::resolver::query query("35.187.243.198", "12345");               // create a query with the slave address+port, change depending on the machine's actual server+port
         tcp::resolver::iterator endpoint_iterator = resolver.resolve(query); // resolve query to get endpoint iterator
         boost::system::error_code ec;                                        // holder for error code (for checking)
         connect(slave_socket, endpoint_iterator, ec);                        // attempt to connect
@@ -153,7 +199,7 @@ int main()
         tcp::socket socket(io_service);
         acceptor.accept(socket);
         std::cout << "Client Connected." << std::endl;
-        std::thread(handle_client, std::move(socket), std::ref(slaves), master_only).detach();
+        std::thread(handle_client, std::move(socket), std::ref(slaves), master_only, std::ref(io_service)).detach();
     }
 
     return 0;
