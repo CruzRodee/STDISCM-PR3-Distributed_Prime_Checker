@@ -56,6 +56,6 @@ df = pd.DataFrame({
 })
 
 # Save the results to a CSV file
-df.to_csv('test_results_with_slave.csv', index=False)
+df.to_csv('test_results_with_3slaves.csv', index=False)
 
-print("Test results saved to test_results_with_slave.csv")
+print("Test results saved to test_results_with_3slaves.csv")

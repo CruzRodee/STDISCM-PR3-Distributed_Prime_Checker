@@ -13,8 +13,8 @@ def transpose_csv(input_file, output_file):
     df_transposed.to_csv(output_file, index=True)
 
 # File paths
-input_file = 'test_results_with_slave.csv'
-output_file = 'test_results_with_slave_transposed.csv'
+input_file = 'test_results_with_3slaves.csv'
+output_file = 'test_results_with_3slaves_transposed.csv'
 
 # Print current working directory
 print(f"Current working directory: {os.getcwd()}")

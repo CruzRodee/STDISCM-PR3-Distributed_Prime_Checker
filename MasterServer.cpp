@@ -1,5 +1,3 @@
-// Server.cpp
-
 #include <iostream>
 #include <boost/asio.hpp> // Boost.Asio Library for networking
 #include <thread>
@@ -88,7 +86,9 @@ void handle_client(tcp::socket socket, std::vector<tcp::socket> &slaves, bool ma
 
                 slaves[i] = tcp::socket(io_service);
                 tcp::resolver resolver(io_service);
-                tcp::resolver::query query("35.187.243.198", "12345"); // Use your slave address and port
+                std::string slave_ip = (i == 0) ? "34.87.1.162" : (i == 1) ? "35.187.243.198"
+                                                                           : "34.143.215.238";
+                tcp::resolver::query query(slave_ip, "12345"); // Query for the slave server address and port
                 tcp::resolver::iterator endpoint_iterator = resolver.resolve(query, ec);
                 if (!ec)
                 {
@@ -178,19 +178,26 @@ int main()
 
     if (!master_only)
     {
-        // Slave 2: Google VM Slave
-        tcp::socket slave_socket(io_service);                                // socket for slave
-        tcp::resolver resolver(io_service);                                  // resolver for translating slave address+port to endpoint
-        tcp::resolver::query query("35.187.243.198", "12345");               // create a query with the slave address+port, change depending on the machine's actual server+port
-        tcp::resolver::iterator endpoint_iterator = resolver.resolve(query); // resolve query to get endpoint iterator
-        boost::system::error_code ec;                                        // holder for error code (for checking)
-        connect(slave_socket, endpoint_iterator, ec);                        // attempt to connect
-        if (ec)                                                              // error check
+        // List of slave server IPs
+        std::vector<std::string> slave_ips = {"34.87.1.162", "35.187.243.198", "34.143.215.238"};
+
+        // Connect to each slave server
+        for (const auto &slave_ip : slave_ips)
         {
-            std::cerr << "Failed to connect to slave: " << ec.message() << std::endl;
-            return 1;
+            tcp::socket slave_socket(io_service);                                // socket for slave
+            tcp::resolver resolver(io_service);                                  // resolver for translating slave address+port to endpoint
+            tcp::resolver::query query(slave_ip, "12345");                       // create a query with the slave address+port
+            tcp::resolver::iterator endpoint_iterator = resolver.resolve(query); // resolve query to get endpoint iterator
+            boost::system::error_code ec;                                        // holder for error code (for checking)
+            connect(slave_socket, endpoint_iterator, ec);                        // attempt to connect
+            if (ec)                                                              // error check
+            {
+                std::cerr << "Failed to connect to slave " << slave_ip << ": " << ec.message() << std::endl;
+                continue;
+            }
+            std::cout << "Connected to slave " << slave_ip << std::endl;
+            slaves.push_back(std::move(slave_socket)); // add the slave socket to vector
         }
-        slaves.push_back(std::move(slave_socket)); // add the slave socket to vector
     }
 
     while (true)
