@@ -19,3 +19,7 @@ if p_value < alpha:
     print("Reject the null hypothesis. There is a significant difference in performance.")
 else:
     print("Fail to reject the null hypothesis. There is no significant difference in performance.")
+
+# How to run:
+# pip install pandas scipy
+# python Stats.py
